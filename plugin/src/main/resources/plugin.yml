@@ -1,0 +1,17 @@
+name: ModernTextures
+version: 1.0.0
+main: dev.moderntextures.plugin.ModernTexturesPlugin
+api-version: '26.3'
+description: Texturas modernas por protocolo para Paper 26.3, com packs gerados separadamente.
+author: ModernTextures
+depend: [ViaVersion, ViaBackwards]
+softdepend: [ViaRewind]
+commands:
+  moderntextures:
+    aliases: [mt]
+    description: Estado, envio e recarga dos packs.
+    usage: /mt <status [jogador]|send jogador|reload>
+    permission: moderntextures.admin
+permissions:
+  moderntextures.admin:
+    default: op

@@ -1,0 +1,11 @@
+dependencies {
+    implementation project(':core')
+    compileOnly 'com.google.code.gson:gson:2.13.2'
+    compileOnly 'io.papermc.paper:paper-api:26.3.build.245-stable'
+    compileOnly 'com.viaversion:viaversion-api:5.12.2'
+}
+tasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xlint:deprecation'] }
+jar {
+    archiveFileName = 'ModernTextures.jar'
+    from project(':core').sourceSets.main.output
+}
