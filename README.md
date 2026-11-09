@@ -21,6 +21,9 @@ Packs de resource pack do servidor e documentação do projeto **FixTextures** (
 
 Preparação da próxima geração (FixTextures): entidades, blocos, armor trims, itens segurados (lança), partículas, variantes de textura e tutorial embutido no plugin. Nenhum código foi alterado nesta etapa.
 
+- Branch `main`: packs publicados + documentação (GitHub Pages).
+- Branch `source`: baseline do código-fonte (Gradle/Java) antes da implementação do FixTextures.
+
 ## Publicar um pack
 
 1. Gere o ZIP e o `manifest.json`.
