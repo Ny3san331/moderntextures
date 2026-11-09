@@ -1,5 +1,7 @@
 # FixTextures
 
+**1.0.1:** correções de itens de bloco 3D, seletores legados e recargas de packs. Veja [diagnóstico e limites da 1.16.5](docs/CORRECOES-1.0.1.md).
+
 Plugin **Paper 26.3 / Java 25** que escolhe e envia resource packs com texturas da 26.3 para clientes antigos. Inclui gerador independente, catálogo editável e relatórios de cobertura.
 
 Inclui entidades, armaduras, armor trims, partículas, aliases de blocos e pose própria de lança. Recursos incompatíveis continuam identificados nos relatórios. O tutorial é instalado em `plugins/FixTextures/TUTORIAL.md`.
