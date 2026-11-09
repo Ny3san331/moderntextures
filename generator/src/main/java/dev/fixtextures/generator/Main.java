@@ -1,6 +1,6 @@
-package dev.moderntextures.generator;
+package dev.fixtextures.generator;
 
-import dev.moderntextures.core.*;
+import dev.fixtextures.core.*;
 import java.nio.file.*;
 import java.util.*;
 
@@ -14,12 +14,12 @@ public final class Main {
         for (int i=0; i<args.length; i++) {
             String key=args[i];
             if (Set.of("--list", "--help", "--all").contains(key)) options.put(key,"true");
-            else if (Set.of("--config", "--output", "--cache", "--targets").contains(key) && i+1<args.length) options.put(key,args[++i]);
+            else if (Set.of("--config", "--output", "--cache", "--targets", "--variant", "--display-name").contains(key) && i+1<args.length) options.put(key,args[++i]);
             else throw new IllegalArgumentException("Argumento desconhecido/incompleto: " + key);
         }
         if (options.containsKey("--list")) { Profiles.ALL.forEach(p -> System.out.println(p.version() + " protocolo=" + p.protocol())); return; }
         if (options.containsKey("--help") || args.length==0) {
-            System.out.println("ModernTextures Generator (Java 25)\n--targets 1.8.9,1.21.10,26.2 OU --all\n--config mappings.json --output packs --cache cache\n--list lista os perfis exatos. --all baixa clientes de todos os perfis (~gigabytes).\nPacks gerados não equivalem a homologação visual."); return;
+            System.out.println("FixTextures Generator (Java 25)\n--targets 1.8.9,1.21.10,26.2 OU --all\n--config mappings.json --output packs --cache cache\n--variant <nome> --display-name <texto> (manifesto schema 2)\n--list lista os perfis exatos. --all baixa clientes de todos os perfis (~gigabytes).\nPacks gerados não equivalem a homologação visual."); return;
         }
         if (options.containsKey("--all") == options.containsKey("--targets")) throw new IllegalArgumentException("Escolha --all OU --targets.");
         MappingConfig config=Json.read(Path.of(options.getOrDefault("--config","mappings.json")),MappingConfig.class); config.validate();
@@ -34,10 +34,14 @@ public final class Main {
             System.out.println("Gerando " + profile.version() + "...");
             var result=builder.build(profile,Assets.read(downloads.officialClient(profile.version())),output);
             packs.put(profile.protocol(),new PackManifest.Pack(profile.version(),profile.protocol(),result.zip().getFileName().toString(),result.sha1()));
-            PackManifest manifest=new PackManifest(1,"26.3",List.copyOf(packs.values())); manifest.validate();
+            PackManifest manifest=new PackManifest(2,"26.3",
+                options.getOrDefault("--variant","default"),
+                options.getOrDefault("--display-name","FixTextures padrão"),
+                List.copyOf(packs.values()));
+            manifest.validate();
             Path temp=Files.createTempFile(output,"manifest-",".tmp"); Json.write(temp,manifest); Files.move(temp,manifestPath,StandardCopyOption.REPLACE_EXISTING);
             System.out.println("OK: " + result.zip());
         }
-        System.out.println("Publique os ZIPs via HTTP(S) e copie manifest.json para plugins/ModernTextures/.");
+        System.out.println("Publique os ZIPs via HTTP(S) e copie manifest.json para plugins/FixTextures/.");
     }
 }

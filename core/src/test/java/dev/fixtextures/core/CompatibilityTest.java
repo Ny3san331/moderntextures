@@ -1,4 +1,4 @@
-package dev.moderntextures.core;
+package dev.fixtextures.core;
 
 import org.junit.jupiter.api.Test;
 import java.util.*;

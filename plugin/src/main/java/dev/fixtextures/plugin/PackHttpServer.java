@@ -1,4 +1,4 @@
-package dev.moderntextures.plugin;
+package dev.fixtextures.plugin;
 
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
@@ -12,6 +12,10 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -42,7 +46,7 @@ final class PackHttpServer implements AutoCloseable {
             : new InetSocketAddress(InetAddress.getByName(bind), port);
         this.server = HttpServer.create(address, 0);
         this.executor = Executors.newFixedThreadPool(4, r -> {
-            Thread thread = new Thread(r, "ModernTextures-HTTP");
+            Thread thread = new Thread(r, "FixTextures-HTTP");
             thread.setDaemon(true);
             return thread;
         });
@@ -66,7 +70,7 @@ final class PackHttpServer implements AutoCloseable {
 
             String name = exchange.getRequestURI().getPath();
             if (name.startsWith("/")) name = name.substring(1);
-            if (name.isEmpty() || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0 || name.contains("..") || !source.contains(name)) {
+            if (name.isEmpty() || name.indexOf('\\') >= 0 || name.contains("..") || !source.contains(name)) {
                 sendEmpty(exchange, 404);
                 return;
             }
@@ -201,6 +205,35 @@ final class PackHttpServer implements AutoCloseable {
                     zip.close();
                     throw e;
                 }
+            }
+        };
+    }
+
+    /** Roteia nomes com prefixo (ex.: variants/pvp/pack.zip) para fontes por variante. */
+    static Source routed(Map<String,Source> routes) {
+        record Match(Source source, String name) {}
+        List<Map.Entry<String,Source>> entries = new ArrayList<>(routes.entrySet());
+        entries.sort((a, b) -> {
+            int byLength = Integer.compare(b.getKey().length(), a.getKey().length());
+            return byLength != 0 ? byLength : a.getKey().compareTo(b.getKey());
+        });
+        return new Source() {
+            private Match match(String name) {
+                for (var entry : entries) {
+                    String prefix = entry.getKey();
+                    if (!name.startsWith(prefix)) continue;
+                    String rest = name.substring(prefix.length());
+                    if (rest.isEmpty()) continue;
+                    if (entry.getValue().contains(rest)) return new Match(entry.getValue(), rest);
+                }
+                return null;
+            }
+            @Override public boolean contains(String name) { return match(name) != null; }
+            @Override public long size(String name) throws IOException {
+                Match found = match(name); if (found == null) throw new FileNotFoundException(name); return found.source().size(found.name());
+            }
+            @Override public InputStream open(String name) throws IOException {
+                Match found = match(name); if (found == null) throw new FileNotFoundException(name); return found.source().open(found.name());
             }
         };
     }

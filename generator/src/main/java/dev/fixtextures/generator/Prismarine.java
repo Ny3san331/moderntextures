@@ -1,7 +1,7 @@
-package dev.moderntextures.generator;
+package dev.fixtextures.generator;
 
 import com.google.gson.*;
-import dev.moderntextures.core.*;
+import dev.fixtextures.core.*;
 import java.util.*;
 import java.nio.charset.StandardCharsets;
 

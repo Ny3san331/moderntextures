@@ -1,19 +1,31 @@
-# Hospede os ZIPs gerados em um servidor HTTP(S) acessível pelos jogadores.
-# Exemplo: https://cdn.seudominio.com/moderntextures/
+# FixTextures - configuracao
+# Hospede os ZIPs gerados em um servidor HTTP(S) acessivel pelos jogadores.
+# Padrao do servidor: https://ny3san331.github.io/moderntextures/
+# Exemplo: https://cdn.seudominio.com/fixtextures/
 base-url: ''
-prompt: 'Texturas da versão 26.3 adaptadas para seu cliente.'
+prompt: 'Texturas da versao 26.3 adaptadas para seu cliente.'
 timeout-seconds: 120
 detect-attempts: 20
 detect-interval-ticks: 5
 notify-player: true
-# Opcional: serve os packs pelo próprio plugin, sem host HTTP externo.
-# Requer uma porta TCP pública adicional (NÃO use a porta do Minecraft).
-# Coloque os ZIPs em plugins/ModernTextures/packs/ ou o bundle em plugins/ModernTextures/packs.zip.
-# public-url é o endereço que o jogador usa, por exemplo http://IP:8080/
+
+# Variantes de textura (pasta plugins/FixTextures/variants/<nome>/).
+# O jogador escolhe com /ft texture list e /ft texture <nome>.
+variants:
+  default: default
+  allow-player-choice: true
+
+# Opcional: serve os packs pelo proprio plugin, sem host HTTP externo.
+# Requer uma porta TCP publica adicional (NAO use a porta do Minecraft).
+# Coloque os ZIPs em plugins/FixTextures/packs/ ou o bundle em plugins/FixTextures/packs.zip.
+# Variantes usam plugins/FixTextures/variants/<nome>/packs/ (ou packs.zip).
+# public-url e o endereco que o jogador usa, por exemplo http://IP:8080/
 embedded-server:
   enabled: false
   bind: '0.0.0.0'
   port: 8080
   public-url: ''
-# O manifesto fica sempre na pasta deste plugin.
-# A geração ocorre fora do servidor: java -jar ModernTextures-Generator.jar --help
+
+# O manifesto fica sempre na pasta deste plugin (manifest.json).
+# A geracao ocorre fora do servidor: java -jar FixTextures-Generator.jar --help
+# O tutorial completo e copiado para plugins/FixTextures/TUTORIAL.md na primeira execucao.

@@ -1,7 +1,7 @@
-package dev.moderntextures.generator;
+package dev.fixtextures.generator;
 
 import com.google.gson.*;
-import dev.moderntextures.core.Json;
+import dev.fixtextures.core.Json;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -40,7 +40,7 @@ final class Assets {
     }
     JsonObject packMetadata(int protocol) {
         JsonObject pack = new JsonObject();
-        pack.addProperty("description", "ModernTextures 26.3 - texturas adaptadas");
+        pack.addProperty("description", "FixTextures 26.3 - texturas adaptadas");
         JsonObject version = object("version.json");
         JsonElement format = null;
         if (version != null && version.has("pack_version")) {

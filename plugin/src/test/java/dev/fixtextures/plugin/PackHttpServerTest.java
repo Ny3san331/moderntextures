@@ -1,4 +1,4 @@
-package dev.moderntextures.plugin;
+package dev.fixtextures.plugin;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

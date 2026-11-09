@@ -1,4 +1,4 @@
-package dev.moderntextures.core;
+package dev.fixtextures.core;
 
 import java.util.*;
 
@@ -15,7 +15,7 @@ public record MappingConfig(int schema, String sourceVersion, String prismarineC
         for (ItemRule r : items) {
             if (r == null) throw new IllegalArgumentException("Regra nula no array items.");
             identifier(r.source); identifier(r.substitute); texture(r.texture);
-            if (r.model == null || !Set.of("generated", "handheld").contains(r.model)) throw new IllegalArgumentException("Modelo deve ser generated ou handheld: " + r.source);
+            if (r.model == null || !Set.of("generated", "handheld", "spear").contains(r.model)) throw new IllegalArgumentException("Modelo deve ser generated, handheld ou spear: " + r.source);
             if (r.clients == null || r.clients.isEmpty() || r.stringIndex < 0 || r.stringIndex > 63) throw new IllegalArgumentException("clients/stringIndex inválido: " + r.source);
             for (String version : r.clients) {
                 var p = Profiles.version(version);

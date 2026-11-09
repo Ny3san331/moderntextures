@@ -1,4 +1,4 @@
-package dev.moderntextures.generator;
+package dev.fixtextures.generator;
 
 import com.google.gson.*;
 import org.junit.jupiter.api.Test;
@@ -9,7 +9,7 @@ import java.util.zip.ZipFile;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import javax.imageio.ImageIO;
-import dev.moderntextures.core.*;
+import dev.fixtextures.core.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PackGenerationTest {
@@ -20,14 +20,14 @@ class PackGenerationTest {
     @Test void createsDeterministicZipAndValidatesReferences() throws Exception {
         Map<String,byte[]> pack=new TreeMap<>();
         PackBuilder.put(pack,"pack.mcmeta",JsonParser.parseString("{\"pack\":{\"pack_format\":46,\"description\":\"test\"}}"));
-        pack.put("assets/moderntextures/textures/item/test.png",png(16,16));
-        PackBuilder.put(pack,"assets/moderntextures/models/item/test.json",JsonParser.parseString("{\"parent\":\"minecraft:item/generated\",\"textures\":{\"layer0\":\"moderntextures:item/test\"}}"));
-        PackBuilder.put(pack,"assets/minecraft/items/stone.json",JsonParser.parseString("{\"model\":{\"type\":\"minecraft:model\",\"model\":\"moderntextures:item/test\"}}"));
+        pack.put("assets/fixtextures/textures/item/test.png",png(16,16));
+        PackBuilder.put(pack,"assets/fixtextures/models/item/test.json",JsonParser.parseString("{\"parent\":\"minecraft:item/generated\",\"textures\":{\"layer0\":\"fixtextures:item/test\"}}"));
+        PackBuilder.put(pack,"assets/minecraft/items/stone.json",JsonParser.parseString("{\"model\":{\"type\":\"minecraft:model\",\"model\":\"fixtextures:item/test\"}}"));
         PackBuilder.validate(pack,new Assets());
         Path a=dir.resolve("a.zip"),b=dir.resolve("b.zip");PackBuilder.zip(pack,a);PackBuilder.zip(pack,b);
         assertArrayEquals(Files.readAllBytes(a),Files.readAllBytes(b));
         try(var zip=new ZipFile(a.toFile())) { assertNotNull(zip.getEntry("pack.mcmeta"));assertEquals(4,zip.size()); }
-        pack.remove("assets/moderntextures/textures/item/test.png");
+        pack.remove("assets/fixtextures/textures/item/test.png");
         assertThrows(IOException.class,() -> PackBuilder.validate(pack,new Assets()));
     }
     @Test void rejectsChangedUvsAndInvalidImages() throws Exception {
@@ -57,7 +57,7 @@ class PackGenerationTest {
     }
     @Test void validatesPathsAndBrokenModelReferences() {
         Map<String,byte[]> p=new TreeMap<>();PackBuilder.put(p,"pack.mcmeta",new JsonObject());
-        PackBuilder.put(p,"assets/minecraft/items/a.json",JsonParser.parseString("{\"model\":\"moderntextures:item/missing\"}"));
+        PackBuilder.put(p,"assets/minecraft/items/a.json",JsonParser.parseString("{\"model\":\"fixtextures:item/missing\"}"));
         assertThrows(IOException.class,() -> PackBuilder.validate(p,new Assets()));
         p.remove("assets/minecraft/items/a.json");p.put("../evil",new byte[0]);
         assertThrows(IOException.class,() -> PackBuilder.validate(p,new Assets()));
@@ -78,7 +78,7 @@ class PackGenerationTest {
             .build(Profiles.version("1.20.4"),target,dir);
         assertFalse((Boolean)result.report().get("worldBlockCatalogAvailable"));
         try(var zip=new ZipFile(result.zip().toFile())) {
-            assertNotNull(zip.getEntry("assets/minecraft/textures/item/moderntextures_test_spear.png"));
+            assertNotNull(zip.getEntry("assets/minecraft/textures/item/fixtextures_test_spear.png"));
             var model=JsonParser.parseString(new String(zip.getInputStream(zip.getEntry("assets/minecraft/models/item/iron_sword.json")).readAllBytes())).getAsJsonObject();
             var overrides=model.getAsJsonArray("overrides");
             assertEquals(1,overrides.size());
@@ -94,15 +94,15 @@ class PackGenerationTest {
         var result=new PackBuilder(source,itemRule("1.21.4",null,"test_spear"),null,null)
             .build(Profiles.version("1.21.4"),target,dir);
         try(var zip=new ZipFile(result.zip().toFile())) {
-            assertNotNull(zip.getEntry("assets/minecraft/textures/item/moderntextures_test_spear.png"));
+            assertNotNull(zip.getEntry("assets/minecraft/textures/item/fixtextures_test_spear.png"));
             var definition=JsonParser.parseString(new String(zip.getInputStream(zip.getEntry("assets/minecraft/items/iron_sword.json")).readAllBytes())).getAsJsonObject();
             var select=definition.getAsJsonObject("model");
             assertEquals("minecraft:select",select.get("type").getAsString());
             assertEquals("minecraft:item/iron_sword",select.getAsJsonObject("fallback").get("model").getAsString());
-            assertEquals("moderntextures:item/test_spear",select.getAsJsonArray("cases").get(0).getAsJsonObject().getAsJsonObject("model").get("model").getAsString());
-            var layer0=JsonParser.parseString(new String(zip.getInputStream(zip.getEntry("assets/moderntextures/models/item/test_spear.json")).readAllBytes()))
+            assertEquals("fixtextures:item/test_spear",select.getAsJsonArray("cases").get(0).getAsJsonObject().getAsJsonObject("model").get("model").getAsString());
+            var layer0=JsonParser.parseString(new String(zip.getInputStream(zip.getEntry("assets/fixtextures/models/item/test_spear.json")).readAllBytes()))
                 .getAsJsonObject().getAsJsonObject("textures").get("layer0");
-            assertEquals("minecraft:item/moderntextures_test_spear",layer0.getAsString());
+            assertEquals("minecraft:item/fixtextures_test_spear",layer0.getAsString());
         }
     }
     @Test void modernSpriteReferenceUsesObjectFrom261() throws Exception {
@@ -114,11 +114,35 @@ class PackGenerationTest {
         var result=new PackBuilder(source,itemRule("26.1.2",null,"test_spear"),null,null)
             .build(Profiles.version("26.1.2"),target,dir);
         try(var zip=new ZipFile(result.zip().toFile())) {
-            var sprite=JsonParser.parseString(new String(zip.getInputStream(zip.getEntry("assets/moderntextures/models/item/test_spear.json")).readAllBytes()))
+            var sprite=JsonParser.parseString(new String(zip.getInputStream(zip.getEntry("assets/fixtextures/models/item/test_spear.json")).readAllBytes()))
                 .getAsJsonObject().getAsJsonObject("textures").getAsJsonObject("layer0").get("sprite").getAsString();
-            assertEquals("minecraft:item/moderntextures_test_spear",sprite);
+            assertEquals("minecraft:item/fixtextures_test_spear",sprite);
         }
     }
+    @Test void mapsMovedEquipmentAndEntitiesButRejectsChangedDimensions() throws Exception {
+        var config = new MappingConfig(1,"26.3","a".repeat(40),"b".repeat(40),false,Map.of(),List.of());
+        Assets source = new Assets(), target = new Assets();
+        Map<String,String> aliases = Map.of(
+            "models/armor/iron_layer_1.png", "entity/equipment/humanoid/iron.png",
+            "entity/elytra.png", "entity/equipment/wings/elytra.png",
+            "entity/beacon_beam.png", "entity/beacon/beacon_beam.png",
+            "entity/panda/aggressive_panda.png", "entity/panda/panda_aggressive.png");
+        String prefix = "assets/minecraft/textures/";
+        aliases.forEach((old, recent) -> {
+            try { target.files.put(prefix + old, png(64,32)); source.files.put(prefix + recent, png(64,32)); }
+            catch (IOException e) { throw new UncheckedIOException(e); }
+        });
+        target.files.put(prefix + "entity/cow/cow.png", png(64,32));
+        source.files.put(prefix + "entity/cow/cow_temperate.png", png(64,64));
+        target.files.put("version.json", "{\"pack_version\":22}".getBytes());
+        var result = new PackBuilder(source,config,null,null).build(Profiles.version("1.20.4"),target,dir);
+        try (var zip = new ZipFile(result.zip().toFile())) {
+            for (String old : aliases.keySet()) assertNotNull(zip.getEntry(prefix + old), old);
+            assertNull(zip.getEntry(prefix + "entity/cow/cow.png"));
+        }
+        assertEquals(1, ((List<?>)result.report().get("incompatibleUvLayout")).size());
+    }
+
     @Test void buildsPreFlatteningPackWithoutTreatingLegacyNumericRegistryAsNames() throws Exception {
         var config=new MappingConfig(1,"26.3","a".repeat(40),"b".repeat(40),false,Map.of(),List.of());
         Assets source=new Assets(),target=new Assets();

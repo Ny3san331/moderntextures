@@ -3,9 +3,9 @@ dependencies {
     implementation project(':core')
     implementation 'com.google.code.gson:gson:2.13.2'
 }
-application { mainClass = 'dev.moderntextures.generator.Main' }
+application { mainClass = 'dev.fixtextures.generator.Main' }
 tasks.register('fatJar', Jar) {
-    archiveFileName = 'ModernTextures-Generator.jar'
+    archiveFileName = 'FixTextures-Generator.jar'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest { attributes 'Main-Class': application.mainClass.get() }
     from sourceSets.main.output

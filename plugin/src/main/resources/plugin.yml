@@ -1,17 +1,18 @@
-name: ModernTextures
+name: FixTextures
 version: 1.0.0
-main: dev.moderntextures.plugin.ModernTexturesPlugin
+main: dev.fixtextures.plugin.FixTexturesPlugin
 api-version: '26.3'
-description: Texturas modernas por protocolo para Paper 26.3, com packs gerados separadamente.
-author: ModernTextures
+description: Texturas da 26.3 por protocolo para Paper 26.3 (blocos, entidades, armadura, trims, partículas e itens segurados).
+author: FixTextures
 depend: [ViaVersion, ViaBackwards]
 softdepend: [ViaRewind]
 commands:
-  moderntextures:
-    aliases: [mt]
-    description: Estado, envio e recarga dos packs.
-    usage: /mt <status [jogador]|send jogador|reload>
-    permission: moderntextures.admin
+  fixtextures:
+    aliases: [ft, mt]
+    description: Estado, envio, recarga e variantes de textura.
+    usage: /ft <status [jogador]|send [jogador]|reload|texture list|texture <nome>|texture <jogador> <nome>>
 permissions:
-  moderntextures.admin:
+  fixtextures.admin:
     default: op
+  moderntextures.admin:
+    default: false

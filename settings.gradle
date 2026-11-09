@@ -1,2 +1,2 @@
-rootProject.name = 'ModernTextures'
+rootProject.name = 'FixTextures'
 include 'core', 'generator', 'plugin'

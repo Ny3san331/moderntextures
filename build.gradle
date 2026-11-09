@@ -1,5 +1,5 @@
 allprojects {
-    group = 'dev.moderntextures'
+    group = 'dev.fixtextures'
     version = '1.0.0'
     repositories {
         mavenCentral()

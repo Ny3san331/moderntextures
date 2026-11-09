@@ -1,13 +1,15 @@
-# ModernTextures → FixTextures
+# FixTextures
 
 Plugin **Paper 26.3 / Java 25** que escolhe e envia resource packs com texturas da 26.3 para clientes antigos. Inclui gerador independente, catálogo editável e relatórios de cobertura.
 
-> **Preparação em andamento:** a próxima geração chama-se **FixTextures** e amplia o escopo para entidades, blocos, armor trims, itens segurados (lança) e partículas, com variantes de textura e tutorial embutido. Nenhum código foi alterado ainda. Leia o [plano](docs/PLANO-FIXTEXTURES.md), o [inventário de assets](docs/ASSETS-26.3.md), a [migração de nome](docs/MIGRACAO-FIXTEXTURES.md) e o [tutorial de texturas](docs/TUTORIAL-TEXTURAS.md).
+Inclui entidades, armaduras, armor trims, partículas, aliases de blocos e pose própria de lança. Recursos incompatíveis continuam identificados nos relatórios. O tutorial é instalado em `plugins/FixTextures/TUTORIAL.md`.
+
+Variantes ficam em `plugins/FixTextures/variants/<nome>/manifest.json`, com ZIPs na subpasta `packs/`. Use `/ft texture list` e `/ft texture <nome>`. Para gerar outra variante, acrescente `--variant <nome> --display-name <texto>` ao gerador. A hospedagem padrão do projeto é https://ny3san331.github.io/moderntextures/.
 
 ## Entrega
 
-- `plugin/build/libs/ModernTextures.jar`: plugin do Paper 26.3+.
-- `generator/build/libs/ModernTextures-Generator.jar`: gerador executável Java 25.
+- `plugin/build/libs/FixTextures.jar`: plugin do Paper 26.3+.
+- `generator/build/libs/FixTextures-Generator.jar`: gerador executável Java 25.
 - `mappings.json`: mapeamentos e commits das fontes.
 - `packs/`: ZIPs gerados, manifesto e relatórios por cliente.
 - `docs/`: configuração, arquitetura e testes manuais.
@@ -17,11 +19,11 @@ Plugin **Paper 26.3 / Java 25** que escolhe e envia resource packs com texturas 
 ## Instalação
 
 1. Use **Paper 26.3 com JDK 25**. O JAR é compilado contra `paper-api` e usa Adventure; não é compatível com Spigot.
-2. Instale **ViaVersion 5.12.2**, **ViaBackwards 5.12.2** e, para 1.7/1.8, **ViaRewind 4.2.0** no **Paper**, junto de `ModernTextures.jar`.
+2. Instale **ViaVersion 5.12.2**, **ViaBackwards 5.12.2** e, para 1.7/1.8, **ViaRewind 4.2.0** no **Paper**, junto de `FixTextures.jar`.
 3. Se houver BungeeCord, mantenha uma build compatível com os protocolos desejados. A configuração recomendada traduz no backend Paper; não instale a tradução simultaneamente no proxy e backend. O plugin não é um plugin BungeeCord.
-4. Reinicie o servidor. O plugin cria `plugins/ModernTextures/config.yml` e um manifesto vazio.
+4. Reinicie o servidor. O plugin cria `plugins/FixTextures/config.yml`, o tutorial e um manifesto vazio.
 5. Gere os packs (ou use os entregues em `packs/`). Hospede os **ZIPs** em HTTP(S), em URLs diretas, sem autenticação/intersticial.
-6. Copie `packs/manifest.json` para `plugins/ModernTextures/manifest.json` e configure `base-url`, por exemplo `https://cdn.exemplo.com/moderntextures/`.
+6. Copie `packs/manifest.json` para `plugins/FixTextures/manifest.json` e configure `base-url: 'https://ny3san331.github.io/moderntextures/'`.
 7. Confirme manualmente no ViaBackwards: `pass-original-item-name-to-resource-packs: true`. Para destinos anteriores à 1.21.4, mantenha também `map-custom-model-data: true`.
 8. Execute `/mt reload` e reconecte, ou `/mt send NomeDoJogador`.
 
@@ -31,10 +33,10 @@ O plugin não configura hospedagem, não modifica `server.properties`, arquivos 
 
 O cliente Minecraft sempre baixa o pack por HTTP. Se você não tem CDN/site, o próprio plugin pode servir os ZIPs:
 
-1. Envie `ModernTextures-Packs.zip` para `plugins/ModernTextures/packs.zip` (ou extraia os 51 ZIPs em `plugins/ModernTextures/packs/`).
+1. Envie `FixTextures-Packs.zip` para `plugins/FixTextures/packs.zip` (ou extraia os 51 ZIPs em `plugins/FixTextures/packs/`).
 2. O `manifest.json` pode continuar vazio: o plugin lê o manifesto de dentro do `packs.zip`. Se preferir, copie `packs/manifest.json`.
 3. No painel, crie uma **alocação/porta TCP adicional**, por exemplo `8080`. Não use a porta do Minecraft.
-4. Em `plugins/ModernTextures/config.yml`:
+4. Em `plugins/FixTextures/config.yml`:
 
 ```yaml
 base-url: ''
@@ -46,7 +48,7 @@ embedded-server:
 ```
 
 5. Reinicie e execute `/mt reload`.
-6. Teste `http://IP_DA_ALOCACAO:8080/moderntextures-26.3-to-1.20.4-5288b440abb2.zip` no navegador.
+6. Teste `http://IP_DA_ALOCACAO:8080/<arquivo-do-manifesto>.zip` no navegador.
 
 O servidor embutido só entrega arquivos listados no manifesto, aceita `HEAD`/`Range` e não lista diretórios. Ele usa HTTP simples; o SHA-1 do pack continua protegendo a integridade. Para HTTPS, coloque um proxy reverso na frente e use `base-url` com o endereço `https://`.
 
@@ -55,9 +57,9 @@ O servidor embutido só entrega arquivos listados no manifesto, aceita `HEAD`/`R
 ## Gerar packs
 
 ```text
-java -jar ModernTextures-Generator.jar --list
-java -jar ModernTextures-Generator.jar --targets 1.8.9,1.20.4,1.21.10,26.2 --config mappings.json --output packs --cache cache
-java -Xmx1536M -jar ModernTextures-Generator.jar --all --config mappings.json --output packs --cache cache
+java -jar FixTextures-Generator.jar --list
+java -jar FixTextures-Generator.jar --targets 1.8.9,1.20.4,1.21.10,26.2 --config mappings.json --output packs --cache cache
+java -Xmx1536M -jar FixTextures-Generator.jar --all --config mappings.json --output packs --cache cache
 ```
 
 Execute no diretório que contém `mappings.json`, ou informe seu caminho. `--all` baixa os clientes oficiais dos perfis (~gigabytes de cache), gera um pack por protocolo e pode demorar. Downloads concluídos são reutilizados. Downloads oficiais têm SHA-1 verificado. Reexecutar depois de uma falha reutiliza o cache e atualiza o manifesto a cada pack concluído.
@@ -72,7 +74,7 @@ Isso é **cobertura de geração/seleção**, não certificação visual de toda
 
 ## Comandos
 
-Permissão: `moderntextures.admin` (padrão: operadores).
+Permissão administrativa: `fixtextures.admin` (padrão: operadores); `moderntextures.admin` é aceito para migração. `/ft texture` permite seleção pessoal. `/mt` permanece como alias.
 
 - `/mt status [jogador]`: protocolo, estado do pack e diagnóstico.
 - `/mt send jogador`: detecta a versão e envia o perfil; não duplica envio pendente.

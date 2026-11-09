@@ -1,7 +1,7 @@
-package dev.moderntextures.generator;
+package dev.fixtextures.generator;
 
 import com.google.gson.*;
-import dev.moderntextures.core.Json;
+import dev.fixtextures.core.Json;
 import java.io.*;
 import java.net.URI;
 import java.net.http.*;
@@ -23,7 +23,7 @@ final class Downloads {
         Path dest = cache.resolve(key);
         if (Files.isRegularFile(dest) && (expectedHash == null || sha1(Files.readAllBytes(dest)).equals(expectedHash))) return dest;
         System.out.println("Download: " + url);
-        var request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofMinutes(5)).header("User-Agent", "ModernTextures/1.0").GET().build();
+        var request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofMinutes(5)).header("User-Agent", "FixTextures/1.0").GET().build();
         var response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
         Path temp = Files.createTempFile(cache, "download-", ".tmp");
         try (var in = response.body(); var out = Files.newOutputStream(temp)) {

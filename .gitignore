@@ -4,3 +4,4 @@ cache/
 packs/
 dist/
 *.log
+packs-test/

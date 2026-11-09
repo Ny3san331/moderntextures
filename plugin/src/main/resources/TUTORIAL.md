@@ -126,14 +126,14 @@ Site usado pelos jogadores: <https://ny3san331.github.io/moderntextures/>
 6. Clique em **Commit changes**.
 7. Aguarde a publicação do GitHub Pages (normalmente 1–3 minutos). Acompanhe em **Actions** ou **Settings → Pages**.
 8. Teste no navegador:
-   `https://ny3san331.github.io/moderntextures/moderntextures-26.3-to-1.20.4-5288b440abb2.zip`
+   `https://ny3san331.github.io/moderntextures/<arquivo-do-manifesto>`
    Deve baixar o ZIP, não abrir uma página de erro.
 
 ### 4.2 Pelo Git (recomendado para muitos arquivos)
 
 ```bash
 git clone https://github.com/Ny3san331/moderntextures.git
-cd moderntextures
+cd fixtextures
 # copie os novos ZIPs e o manifest.json para a raiz
 git add .
 git commit -m "packs: atualiza texturas"
@@ -145,8 +145,8 @@ git push origin main
 - Tudo minúsculo, ASCII, sem espaço.
 - Extensão `.zip`.
 - Não renomeie um pack que já está publicado sem atualizar o `manifest.json`; jogadores podem estar baixando o antigo.
-- O nome gerado pelo ModernTextures segue o padrão
-  `moderntextures-26.3-to-<versão>-<12 primeiros do sha1>.zip`.
+- O nome gerado pelo FixTextures segue o padrão
+  `fixtextures-26.3-to-<versão>-<12 primeiros do sha1>.zip`.
   **Mantenha esse prefixo** para não quebrar URLs e manifests existentes.
 
 ### 4.4 Limites do GitHub Pages
@@ -170,7 +170,7 @@ O `manifest.json` diz ao plugin qual ZIP pertence a cada protocolo e qual é o S
     {
       "clientVersion": "1.20.4",
       "protocol": 765,
-      "file": "moderntextures-26.3-to-1.20.4-5288b440abb2.zip",
+      "file": "fixtextures-26.3-to-1.20.4-5288b440abb2.zip",
       "sha1": "5288b440abb2..."
     }
   ]
@@ -181,7 +181,7 @@ Se você trocou um ZIP, o SHA-1 muda. Opções:
 
 1. **Recomendado:** rodar o gerador, que calcula hash, nome e manifesto:
    ```text
-   java -jar ModernTextures-Generator.jar --targets 1.20.4 --config mappings.json --output packs --cache cache
+   java -jar FixTextures-Generator.jar --targets 1.20.4 --config mappings.json --output packs --cache cache
    ```
 2. Manual (Windows PowerShell):
    ```powershell

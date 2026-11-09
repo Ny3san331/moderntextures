@@ -6,6 +6,6 @@ dependencies {
 }
 tasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xlint:deprecation'] }
 jar {
-    archiveFileName = 'ModernTextures.jar'
+    archiveFileName = 'FixTextures.jar'
     from project(':core').sourceSets.main.output
 }

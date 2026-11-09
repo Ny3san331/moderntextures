@@ -1,4 +1,4 @@
-package dev.moderntextures.core;
+package dev.fixtextures.core;
 
 public enum PackState {
     SENT, ACCEPTED, DOWNLOADED, LOADED, DECLINED, FAILED, DISCARDED, TIMED_OUT;

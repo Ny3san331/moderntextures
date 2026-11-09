@@ -1,4 +1,4 @@
-package dev.moderntextures.core;
+package dev.fixtextures.core;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

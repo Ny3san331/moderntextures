@@ -1,7 +1,7 @@
-package dev.moderntextures.generator;
+package dev.fixtextures.generator;
 
 import com.google.gson.*;
-import dev.moderntextures.core.MappingConfig;
+import dev.fixtextures.core.MappingConfig;
 import java.util.*;
 
 /** Reads the public mapping DATA, not ViaBackwards implementation classes. */

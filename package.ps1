@@ -1,11 +1,11 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $dist = Join-Path $root 'dist'
 $release = Join-Path $dist 'release'
 $docs = Join-Path $dist 'docs'
 New-Item -ItemType Directory -Force -Path $dist, $release, $docs | Out-Null
-Copy-Item (Join-Path $root 'plugin/build/libs/ModernTextures.jar') $release
-Copy-Item (Join-Path $root 'generator/build/libs/ModernTextures-Generator.jar') $release
+Copy-Item (Join-Path $root 'plugin/build/libs/FixTextures.jar') $release
+Copy-Item (Join-Path $root 'generator/build/libs/FixTextures-Generator.jar') $release
 Copy-Item (Join-Path $root 'README.md') $release
 Copy-Item (Join-Path $root 'mappings.json') $release
 Copy-Item (Join-Path $root 'docs/*.md') $docs -Force
@@ -30,10 +30,10 @@ foreach ($pack in $manifest.packs) {
     $file = Join-Path $root ('packs/' + $pack.file)
     if ((Get-FileHash $file -Algorithm SHA1).Hash.ToLower() -ne $pack.sha1) { throw "Hash divergente: $file" }
     $packEntries += @{ File=$file; Name=$pack.file }
-    $report = 'moderntextures-26.3-to-' + $pack.clientVersion + '-report.json'
+    $report = 'fixtextures-26.3-to-' + $pack.clientVersion + '-report.json'
     $packEntries += @{ File=(Join-Path $root ('packs/' + $report)); Name=$report }
 }
-Write-Zip (Join-Path $release 'ModernTextures-Packs.zip') $packEntries
+Write-Zip (Join-Path $release 'FixTextures-Packs.zip') $packEntries
 
 $sourceEntries = @()
 foreach ($folder in @('core','generator','plugin','gradle','docs')) {
@@ -44,13 +44,13 @@ foreach ($folder in @('core','generator','plugin','gradle','docs')) {
 foreach ($file in @('build.gradle','settings.gradle','gradlew','gradlew.bat','mappings.json','README.md','package.ps1','.gitignore')) {
     $sourceEntries += @{ File=(Join-Path $root $file); Name=$file }
 }
-Write-Zip (Join-Path $release 'ModernTextures-Source.zip') $sourceEntries
+Write-Zip (Join-Path $release 'FixTextures-Source.zip') $sourceEntries
 
 $releaseEntries = @()
-foreach ($file in @('ModernTextures.jar','ModernTextures-Generator.jar','ModernTextures-Packs.zip','ModernTextures-Source.zip','README.md','mappings.json')) {
+foreach ($file in @('FixTextures.jar','FixTextures-Generator.jar','FixTextures-Packs.zip','FixTextures-Source.zip','README.md','mappings.json')) {
     $releaseEntries += @{ File=(Join-Path $release $file); Name=$file }
 }
 Get-ChildItem (Join-Path $root 'docs') -File | ForEach-Object { $releaseEntries += @{ File=$_.FullName; Name=('docs/' + $_.Name) } }
-Write-Zip (Join-Path $release 'ModernTextures-1.0.0.zip') $releaseEntries
+Write-Zip (Join-Path $release 'FixTextures-1.0.0.zip') $releaseEntries
 Get-ChildItem $release -File | Select-Object Name,Length
 
