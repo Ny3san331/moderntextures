@@ -9,7 +9,52 @@ import java.util.*;
 import java.util.zip.ZipFile;
 
 final class Assets {
-    final Map<String, byte[]> files = new TreeMap<>();
+    final Map<String, byte[]> files;
+    final String source;
+    Assets() { files = new TreeMap<>(); source = "jar_local"; }
+    private Assets(Map<String,byte[]> files, String source) { this.files = files; this.source = source; }
+    static Assets remote(String version, Downloads downloads, Set<String> index, Path jar) throws Exception {
+        Assets result = new Assets(new RemoteFiles(version, downloads, index), "mcasset");
+        // mcasset's version.json is a site manifest, not the client JAR's pack_version.
+        if (jar != null) try (ZipFile zip = new ZipFile(jar.toFile())) {
+            var entry = zip.getEntry("version.json");
+            if (entry != null) try (var in = zip.getInputStream(entry)) { result.files.put("version.json", in.readAllBytes()); }
+        }
+        return result;
+    }
+    private static final class RemoteFiles extends AbstractMap<String,byte[]> {
+        private final String version;
+        private final Downloads downloads;
+        private final Set<String> index;
+        private final Map<String,byte[]> cached = new java.util.concurrent.ConcurrentHashMap<>();
+        RemoteFiles(String version, Downloads downloads, Set<String> index) {
+            this.version = version; this.downloads = downloads; this.index = index;
+        }
+        @Override public byte[] get(Object key) {
+            if (!(key instanceof String path) || !index.contains(path) && !cached.containsKey(path)) return null;
+            try { return cached.computeIfAbsent(path, p -> {
+                try { return downloads.asset(version, p); }
+                catch (IOException e) { throw new UncheckedIOException(e); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
+            }); } catch (UncheckedIOException e) { throw e; }
+        }
+        @Override public boolean containsKey(Object key) { return index.contains(key) || cached.containsKey(key); }
+        @Override public byte[] put(String key, byte[] value) { return cached.put(key, value); }
+        @Override public Set<String> keySet() { Set<String> keys = new TreeSet<>(index); keys.addAll(cached.keySet()); return keys; }
+        @Override public Set<Entry<String,byte[]>> entrySet() {
+            Set<Entry<String,byte[]>> entries = new LinkedHashSet<>();
+            for (String key : keySet()) entries.add(Map.entry(key, get(key)));
+            return entries;
+        }
+    }
+    void prefetch(Collection<String> paths) throws Exception {
+        if (!(files instanceof RemoteFiles)) return;
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(8)) {
+            List<java.util.concurrent.Future<?>> jobs = new ArrayList<>();
+            for (String path : paths) if (files.containsKey(path)) jobs.add(pool.submit(() -> files.get(path)));
+            for (var job : jobs) job.get();
+        }
+    }
     static Assets read(Path jar) throws IOException {
         Assets a = new Assets();
         try (ZipFile zip = new ZipFile(jar.toFile())) {

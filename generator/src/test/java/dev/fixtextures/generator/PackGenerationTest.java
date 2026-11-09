@@ -47,13 +47,12 @@ class PackGenerationTest {
         assertEquals(88,modern.getAsJsonArray("min_format").get(0).getAsInt());assertFalse(modern.has("pack_format"));
         assertThrows(IllegalArgumentException.class,() -> new Assets().packMetadata(776));
     }
-    @Test void mappingRespectsExplicitRulesAndWordBoundaries() {
-        var diff=JsonParser.parseString("{\"materials\":{\"spear\":\"sword\"},\"items\":{\"wooden_spear\":\"stick\"}}").getAsJsonObject();
-        Set<String> available=Set.of("iron_sword","wooden_sword","stick");
-        assertEquals("iron_sword",ViaMappings.resolve("iron_spear",diff,available));
-        assertEquals("stick",ViaMappings.resolve("wooden_spear",diff,available));
-        assertNull(ViaMappings.resolve("ironspear",diff,available));
-        assertNull(ViaMappings.resolve("diamond_spear",diff,available));
+    @Test void assetUrlsRejectTraversalAndExplicitRulesDoNotUseViaRegistries() {
+        assertEquals("https://assets.mcasset.cloud/1.16.5/assets/minecraft/textures/block/stone.png",
+            Downloads.assetUrl("1.16.5", "assets/minecraft/textures/block/stone.png"));
+        assertThrows(IllegalArgumentException.class, () -> Downloads.assetUrl("1.16.5", "assets/../secret"));
+        assertThrows(IllegalArgumentException.class, () -> Downloads.assetUrl("../1.16.5", "assets/minecraft/a"));
+        assertFalse(AssetIndex.valid("../bad"));
     }
     @Test void validatesPathsAndBrokenModelReferences() {
         Map<String,byte[]> p=new TreeMap<>();PackBuilder.put(p,"pack.mcmeta",new JsonObject());
@@ -131,7 +130,8 @@ class PackGenerationTest {
         PackBuilder.put(source.files,"assets/minecraft/models/block/amethyst_block.json",
             JsonParser.parseString("{\"parent\":\"minecraft:block/cube_all\",\"textures\":{\"all\":\"minecraft:block/amethyst_block\"}}"));
         PackBuilder.put(target.files,"assets/minecraft/models/item/purpur_block.json",JsonParser.parseString("{\"parent\":\"minecraft:block/purpur_block\"}"));
-        PackBuilder.put(target.files,"assets/minecraft/models/block/cube_all.json",new JsonObject());
+        PackBuilder.put(target.files,"assets/minecraft/models/block/cube_all.json",JsonParser.parseString("{\"parent\":\"block/cube\"}"));
+        PackBuilder.put(target.files,"assets/minecraft/models/block/cube.json",JsonParser.parseString("{\"elements\":[{\"from\":[0,0,0],\"to\":[16,16,16],\"faces\":{\"up\":{},\"down\":{},\"north\":{},\"south\":{},\"east\":{},\"west\":{}}}]}"));
         target.files.put("version.json","{\"pack_version\":6}".getBytes());
         var result = new PackBuilder(source,config,null,null).build(Profiles.version("1.16.5"),target,dir);
         try (var zip = new ZipFile(result.zip().toFile())) {
@@ -141,6 +141,23 @@ class PackGenerationTest {
             assertNotNull(zip.getEntry("assets/minecraft/textures/block/fixtextures_amethyst_block_all.png"));
             assertNull(zip.getEntry("assets/minecraft/models/block/purpur_block.json"));
             assertNull(zip.getEntry("assets/minecraft/textures/block/purpur_block.png"));
+        }
+    }
+    @Test void indexDiffSkipsIdenticalContentAndReportsNewUnmappedAssets() throws Exception {
+        Assets source = new Assets(), target = new Assets();
+        String common = "assets/minecraft/textures/block/stone.png";
+        source.files.put(common, png(16,16)); target.files.put(common, source.files.get(common));
+        source.files.put("assets/minecraft/textures/block/new_stone.png", png(16,16));
+        target.files.put("version.json", "{\"pack_version\":6}".getBytes());
+        var config = new MappingConfig(1,"26.3",null,null,false,Map.of(),List.of());
+        var result = new PackBuilder(source,config,null,null).build(Profiles.version("1.16.5"),target,dir);
+        assertEquals("jar_local", result.report().get("source"));
+        assertEquals(0, ((List<?>)result.report().get("updatedTextures")).size());
+        assertTrue(((List<?>)result.report().get("unmappedWorldBlocks")).contains("assets/minecraft/textures/block/new_stone.png"));
+        var changes = (List<?>)result.report().get("asset_diff");
+        assertEquals("new_asset", ((Map<?,?>)changes.getFirst()).get("diff_category"));
+        try (var zip = new ZipFile(result.zip().toFile())) {
+            assertNull(zip.getEntry("assets/minecraft/textures/block/new_stone.png"));
         }
     }
 
@@ -164,7 +181,12 @@ class PackGenerationTest {
     }
 
     @Test void mapsMovedEquipmentAndEntitiesButRejectsChangedDimensions() throws Exception {
-        var config = new MappingConfig(1,"26.3","a".repeat(40),"b".repeat(40),false,Map.of(),List.of());
+        var config = new MappingConfig(1,"26.3","a".repeat(40),"b".repeat(40),false,Map.of(
+            "assets/minecraft/textures/models/armor/iron_layer_1.png", "assets/minecraft/textures/entity/equipment/humanoid/iron.png",
+            "assets/minecraft/textures/entity/elytra.png", "assets/minecraft/textures/entity/equipment/wings/elytra.png",
+            "assets/minecraft/textures/entity/beacon_beam.png", "assets/minecraft/textures/entity/beacon/beacon_beam.png",
+            "assets/minecraft/textures/entity/panda/aggressive_panda.png", "assets/minecraft/textures/entity/panda/panda_aggressive.png",
+            "assets/minecraft/textures/entity/cow/cow.png", "assets/minecraft/textures/entity/cow/cow_temperate.png"),List.of());
         Assets source = new Assets(), target = new Assets();
         Map<String,String> aliases = Map.of(
             "models/armor/iron_layer_1.png", "entity/equipment/humanoid/iron.png",

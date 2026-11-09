@@ -12,7 +12,6 @@ import javax.imageio.ImageIO;
 final class PackBuilder {
     record Result(Path zip, String sha1, Map<String,Object> report) {}
 
-    private static final Set<String> ENTITY_SAFE_EXCLUSIONS = Set.of("player");
     private static final JsonObject SPEAR_DISPLAY = JsonParser.parseString("""
         {
           "firstperson_righthand": {"rotation":[-20,90,-35],"translation":[3.13,2.0,0.13],"scale":[1.36,1.36,0.68]},
@@ -25,21 +24,26 @@ final class PackBuilder {
     private final Assets source;
     private final MappingConfig config;
     private final Prismarine prismarine;
-    private final ViaMappings via;
-    private final Map<String,List<String>> entityByBasename = new HashMap<>();
-
     PackBuilder(Assets source, MappingConfig config, Prismarine prismarine, ViaMappings via) {
-        this.source=source; this.config=config; this.prismarine=prismarine; this.via=via;
-        for (String path : source.files.keySet()) {
-            if (!path.startsWith("assets/minecraft/textures/entity/") || !path.endsWith(".png") || path.contains("/player/")) continue;
-            String base = path.substring(path.lastIndexOf('/') + 1);
-            entityByBasename.computeIfAbsent(base, k -> new ArrayList<>()).add(path);
-        }
+        this.source=source; this.config=config; this.prismarine=prismarine;
     }
 
     Result build(Profiles.Profile profile, Assets target, Path output) throws Exception {
+        Set<String> targetTextures = new TreeSet<>(), sourceTextures = new TreeSet<>();
+        for (String path : target.textures()) {
+            if (!inScope(path) || path.contains("/entity/player/")) continue;
+            String modern = modernPath(path, profile);
+            if (modern == null || !source.files.containsKey(modern)) continue;
+            targetTextures.add(path);
+            sourceTextures.add(modern);
+        }
+        source.prefetch(sourceTextures);
+        target.prefetch(targetTextures);
         Map<String,byte[]> pack = new TreeMap<>();
         Map<String,Object> report = new LinkedHashMap<>();
+        List<Map<String,String>> assetDiff = new ArrayList<>();
+        Map<String,int[]> coverage = new TreeMap<>();
+        for (String category : List.of("blocks", "items", "entities", "trims", "particles")) coverage.put(category, new int[2]);
         List<String> replaced = new ArrayList<>(), unchanged = new ArrayList<>(), incompatible = new ArrayList<>(), prismFallback = new ArrayList<>();
         List<String> entityUpdated = new ArrayList<>(), entitySkipped = new ArrayList<>();
         List<String> armorUpdated = new ArrayList<>(), trimsUpdated = new ArrayList<>(), particlesUpdated = new ArrayList<>();
@@ -49,17 +53,24 @@ final class PackBuilder {
             if (!inScope(path)) continue;
             if (path.contains("/textures/entity/player/")) continue;
             String modern = modernPath(path, profile);
+            String group = reportCategory(path);
+            if (group != null) coverage.get(group)[1]++;
             if (modern == null) { unchanged.add(path); continue; }
             byte[] texture = source.files.get(modern);
             if (texture == null) { texture = prismarine == null ? null : prismarine.fallback.get(modern); if (texture != null) prismFallback.add(path); }
             if (texture == null) { unchanged.add(path); continue; }
+            String diffCategory = modern.equals(path) ? "updated" : "path_alias";
+            if (modern.equals(path) && Arrays.equals(target.files.get(path), texture)) { unchanged.add(path); if (group != null) coverage.get(group)[0]++; continue; }
 
-            String category = category(path);
             if (isEntity(path) && profile.protocol() < 766 && path.contains("/entity/wolf/")) {
                 entitySkipped.add(path + " <- " + modern + " (UV do lobo mudou em 1.20.5)");
+                assetDiff.add(diff(path, modern, diffCategory, "incompatible"));
                 continue;
             }
-            if (!layoutCompatible(path, target.files.get(path), texture)) { incompatible.add(path + " <- " + modern); continue; }
+            if (!layoutCompatible(path, target.files.get(path), texture)) {
+                incompatible.add(path + " <- " + modern);
+                assetDiff.add(diff(path, modern, diffCategory, "incompatible")); continue;
+            }
 
             pack.put(path, texture);
             if (isTrim(path)) {
@@ -84,28 +95,14 @@ final class PackBuilder {
                 if (isBlock(path)) blockAliases.add(path + " <- " + modern);
             }
             replaced.add(path);
+            if (group != null) coverage.get(group)[0]++;
+            // Same dimensions do not prove renderer UV equivalence; no entity renderer model exists in the resource tree.
+            assetDiff.add(diff(path, modern, diffCategory, "unknown"));
         }
 
         List<String> skippedItems = new ArrayList<>(), adaptedItems = new ArrayList<>(), heldItems = new ArrayList<>(), cubeItems = new ArrayList<>();
         Map<String,MappingConfig.ItemRule> rules = new TreeMap<>();
-        if (config.autoItems() && profile.protocol() >= 477 && via != null) {
-            Set<String> available = via.registry(profile.registry(), "items");
-            for (String item : via.registry("26.3", "items")) {
-                if (available.contains(item)) continue;
-                ViaMappings.Translation mapped = via.item(item, profile.registry());
-                String sprite = "assets/minecraft/textures/item/" + item + ".png";
-                String texture = source.files.containsKey(sprite) ? sprite : "assets/minecraft/textures/block/" + item + ".png";
-                boolean spear = source.files.containsKey("assets/minecraft/textures/item/" + item + "_in_hand.png");
-                JsonObject originalModel = source.object("assets/minecraft/models/item/" + item + ".json");
-                String originalParent = originalModel != null && originalModel.has("parent") ? originalModel.get("parent").getAsString().replace("minecraft:", "") : "";
-                boolean handheld = Set.of("item/handheld", "item/handheld_mace").contains(originalParent);
-                if (mapped == null || !source.files.containsKey(texture) || (profile.protocol() < 769 && mapped.cmd() == null)) {
-                    skippedItems.add(item + ": sem tradução verificável ou sprite simples"); continue;
-                }
-                rules.put("minecraft:" + item, new MappingConfig.ItemRule("minecraft:" + item, "minecraft:" + mapped.substitute(),
-                    List.of(profile.version()), texture, spear ? "spear" : handheld ? "handheld" : "generated", mapped.cmd(), mapped.original(), 0));
-            }
-        }
+        // Identical geometry does not identify a protocol carrier or its CMD. Only explicit exceptions may bind a new item.
         config.select(profile.version()).forEach(r -> rules.put(r.source(), r));
         Map<String,List<MappingConfig.ItemRule>> grouped = new TreeMap<>();
         for (var rule : rules.values()) {
@@ -159,20 +156,34 @@ final class PackBuilder {
                     heldItems.add(r.source() + " -> " + r.substitute() + " (modelo de lança/held)");
                 }
                 adaptedItems.add(r.source() + " -> " + r.substitute() + " (" + (hasHand ? "lança em mão" : cube ? "bloco 3D" : "sprite aproximado") + ")");
+                assetDiff.add(diff(r.texture(), path, "manual_exception", "unknown"));
             }
             if (profile.protocol() >= 769) modernItems(pack, target, carrier, entries);
             else legacyItems(pack, target, carrier, entries);
         }
 
         List<String> missingBlocks = new ArrayList<>();
-        boolean namedBlockCatalog = via != null && profile.protocol() >= 393 && ViaMappings.CHAIN.contains(profile.registry());
-        if (namedBlockCatalog) {
-            Set<String> blocks = via.registry(profile.registry(), "blocks");
-            for (String block : via.registry("26.3", "blocks")) if (!blocks.contains(block)) missingBlocks.add(block);
+        Set<String> coveredModern = new HashSet<>();
+        for (Map<String,String> entry : assetDiff) if (entry.containsKey("modern_path") && !"incompatible".equals(entry.get("uv_status")))
+            coveredModern.add(entry.get("modern_path"));
+        for (Map<String,String> entry : assetDiff) if ("manual_exception".equals(entry.get("diff_category"))) coveredModern.add(entry.get("path"));
+        for (String path : source.files.keySet()) {
+            if (!path.startsWith("assets/minecraft/textures/") || !path.endsWith(".png") || target.files.containsKey(path)) continue;
+            String group = reportCategory(path);
+            if (group != null) coverage.get(group)[1]++;
+            if (coveredModern.contains(path)) { if (group != null) coverage.get(group)[0]++; continue; }
+            if (isBlock(path)) missingBlocks.add(path);
+            else if (path.startsWith("assets/minecraft/textures/item/")) skippedItems.add(path + ": sem carrier/CMD explícito");
+            assetDiff.add(diff(path, null, "new_asset", "unknown"));
         }
         put(pack, "pack.mcmeta", target.packMetadata(profile.protocol()));
         report.put("sourceVersion", "26.3"); report.put("clientVersion", profile.version()); report.put("protocol", profile.protocol());
-        report.put("prismarineCommit", config.prismarineCommit()); report.put("viaMappingsCommit", config.viaMappingsCommit());
+        report.put("source", source.source);
+        report.put("target_source", target.source);
+        report.put("asset_diff", assetDiff);
+        Map<String,Double> percentages = new TreeMap<>();
+        coverage.forEach((name, counts) -> percentages.put(name, counts[1] == 0 ? 100.0 : Math.round(10000.0 * counts[0] / counts[1]) / 100.0));
+        report.put("coverage_percent", percentages);
         report.put("updatedTextures", replaced); report.put("unchangedNoRecentTexture", unchanged); report.put("incompatibleUvLayout", incompatible);
         report.put("prismarineFallbackNot26_3", prismFallback);
         report.put("entityUpdated", entityUpdated); report.put("entitySkipped", entitySkipped);
@@ -180,14 +191,14 @@ final class PackBuilder {
         report.put("blockAliases", blockAliases);
         report.put("adaptedItems", adaptedItems); report.put("unadaptedItems", skippedItems); report.put("heldItems", heldItems);
         report.put("cubeItems", cubeItems);
-        report.put("newWorldBlocksUsingViaFallback", missingBlocks);
-        report.put("worldBlockCatalogAvailable", namedBlockCatalog);
+        report.put("unmappedWorldBlocks", missingBlocks);
+        report.put("worldBlockCatalogAvailable", false);
         report.put("conditionalItemModelsAvailable", profile.protocol() >= 477);
-        report.put("limitations", List.of("Não homologado visualmente em cliente real.", "Blocos novos usam tradução Via; estados colidentes não recebem texturas individuais.",
+        report.put("limitations", List.of("Não homologado visualmente em cliente real.", "Índices de assets não informam qual carrier um tradutor de protocolo usa; estados colidentes não recebem texturas individuais.",
             "Itens com componentes customizados por outros plugins podem não corresponder aos seletores gerados.",
             "Sprites de itens novos são aproximações; não reproduzem modelos especiais, tintas ou mecânicas.",
             "A animação hardcoded de uso/ataque da lança continua a do item substituto; pose e textura são corrigidas pelo modelo.",
-            profile.protocol() < 477 ? "Cliente sem CustomModelData: itens novos permanecem com aparência do substituto." : "Requer pass-original-item-name-to-resource-packs=true no ViaBackwards 5.12.2."));
+            profile.protocol() < 477 ? "Cliente sem CustomModelData: itens novos permanecem com aparência do substituto." : "Overrides só funcionam quando o emissor fornece o CMD configurado manualmente."));
         validate(pack, target);
         Files.createDirectories(output);
         String stem = "fixtextures-26.3-to-" + profile.version();
@@ -196,121 +207,22 @@ final class PackBuilder {
         catch (Exception e) { Files.deleteIfExists(temp); throw e; }
         String hash = Downloads.sha1(Files.readAllBytes(temp));
         Path zip = output.resolve(stem + "-" + hash.substring(0,12) + ".zip");
-        Files.move(temp, zip, StandardCopyOption.REPLACE_EXISTING);
-        Json.write(output.resolve(stem + "-report.json"), report);
+        if (Files.isRegularFile(zip)) Files.delete(temp);
+        else Files.move(temp, zip);
+        Path reportPath = output.resolve(stem + "-report.json");
+        if (!Files.isRegularFile(reportPath) || !Json.GSON.toJson(Json.read(reportPath, JsonObject.class)).equals(Json.GSON.toJson(report)))
+            Json.write(reportPath, report);
         return new Result(zip, hash, report);
     }
 
     private String modernPath(String old, Profiles.Profile profile) {
         if (config.textureAliases().containsKey(old)) return config.textureAliases().get(old);
-        String armor = armorAlias(old);
-        if (armor != null) return armor;
-        String equipment = equipmentAlias(old);
-        if (equipment != null && source.files.containsKey(equipment)) return equipment;
-        String trim = trimAlias(old);
-        if (trim != null && source.files.containsKey(trim)) return trim;
-        String entity = entityAlias(old);
-        if (entity != null && source.files.containsKey(entity)) return entity;
-        String block = blockAlias(old);
-        if (block != null && source.files.containsKey(block)) return block;
         if (source.files.containsKey(old)) return old;
         String explicit = prismarine == null ? null : prismarine.aliases.get(old);
         if (explicit != null) return explicit;
         String flattened = old.replace("/textures/blocks/", "/textures/block/").replace("/textures/items/", "/textures/item/");
         if (source.files.containsKey(flattened)) return flattened;
-        String generic = genericEntityAlias(old);
-        if (generic != null && source.files.containsKey(generic)) return generic;
-        return flattened.equals(old) ? null : flattened;
-    }
-
-    private static String armorAlias(String old) {
-        var m = java.util.regex.Pattern.compile("assets/minecraft/textures/models/armor/([a-z0-9_]+)_layer_([12])(_overlay)?\\.png").matcher(old);
-        if (!m.matches()) return null;
-        String material = m.group(1);
-        String layer = m.group(2);
-        boolean overlay = m.group(3) != null;
-        if (overlay) material = "leather_overlay";
-        else if (material.equals("turtle")) material = "turtle_scute";
-        return "assets/minecraft/textures/entity/equipment/" + ("1".equals(layer) ? "humanoid" : "humanoid_leggings") + "/" + material + ".png";
-    }
-
-    private static String equipmentAlias(String old) {
-        String prefix = "assets/minecraft/textures/entity/";
-        if (!old.startsWith(prefix)) return null;
-        String rel = old.substring(prefix.length());
-        if (rel.startsWith("horse/armor/horse_armor_"))
-            return prefix + "equipment/horse_body/" + rel.substring("horse/armor/horse_armor_".length());
-        if (rel.startsWith("llama/decor/"))
-            return prefix + "equipment/llama_body/" + rel.substring("llama/decor/".length());
-        return switch (rel) {
-            case "elytra.png" -> prefix + "equipment/wings/elytra.png";
-            case "pig/pig_saddle.png" -> prefix + "equipment/pig_saddle/saddle.png";
-            case "strider/strider_saddle.png" -> prefix + "equipment/strider_saddle/saddle.png";
-            default -> null;
-        };
-    }
-
-    private static String trimAlias(String old) {
-        if (old.startsWith("assets/minecraft/textures/trims/models/armor/")) {
-            String name = old.substring(old.lastIndexOf('/') + 1).replace(".png", "");
-            boolean leggings = name.endsWith("_leggings");
-            if (leggings) name = name.substring(0, name.length() - "_leggings".length());
-            return "assets/minecraft/textures/trims/entity/" + (leggings ? "humanoid_leggings" : "humanoid") + "/" + name + ".png";
-        }
-        if (old.startsWith("assets/minecraft/textures/trims/color_palettes/")) {
-            String name = old.substring(old.lastIndexOf('/') + 1);
-            return "assets/minecraft/textures/palettes/" + (name.equals("trim_palette.png") ? "trim_base.png" : "trim/" + name);
-        }
         return null;
-    }
-
-    private static String entityAlias(String old) {
-        if (!old.startsWith("assets/minecraft/textures/entity/")) return null;
-        if (old.contains("/player/")) return null;
-        String rel = old.substring("assets/minecraft/textures/entity/".length());
-        return switch (rel) {
-            case "armorstand/wood.png" -> "assets/minecraft/textures/entity/armorstand/armorstand.png";
-            case "chicken.png" -> "assets/minecraft/textures/entity/chicken/chicken_temperate.png";
-            case "cow/red_mooshroom.png" -> "assets/minecraft/textures/entity/mooshroom/mooshroom_red.png";
-            case "cow/brown_mooshroom.png" -> "assets/minecraft/textures/entity/mooshroom/mooshroom_brown.png";
-            case "fox/snow_fox.png" -> "assets/minecraft/textures/entity/fox/fox_snow.png";
-            case "fox/snow_fox_sleep.png" -> "assets/minecraft/textures/entity/fox/fox_snow_sleep.png";
-            case "sheep/sheep_fur.png" -> "assets/minecraft/textures/entity/sheep/sheep_wool.png";
-            case "cow/cow.png" -> "assets/minecraft/textures/entity/cow/cow_temperate.png";
-            case "cow/cow_baby.png" -> "assets/minecraft/textures/entity/cow/cow_temperate_baby.png";
-            case "pig/pig.png" -> "assets/minecraft/textures/entity/pig/pig_temperate.png";
-            case "pig/pig_baby.png" -> "assets/minecraft/textures/entity/pig/pig_temperate_baby.png";
-            case "chicken/chicken.png" -> "assets/minecraft/textures/entity/chicken/chicken_temperate.png";
-            case "chicken/chicken_baby.png" -> "assets/minecraft/textures/entity/chicken/chicken_temperate_baby.png";
-            default -> null;
-        };
-    }
-
-    private String genericEntityAlias(String old) {
-        if (!old.startsWith("assets/minecraft/textures/entity/")) return null;
-        if (old.contains("/player/")) return null;
-        String basename = old.substring(old.lastIndexOf('/') + 1);
-        List<String> candidates = entityByBasename.getOrDefault(basename, List.of());
-        if (candidates.size() == 1) return candidates.getFirst();
-        if (old.contains("/panda/") && basename.endsWith("_panda.png"))
-            return "assets/minecraft/textures/entity/panda/panda_" + basename.replace("_panda.png", ".png");
-        String folderPath = old.substring(0, old.lastIndexOf('/'));
-        String base = old.substring(old.lastIndexOf('/') + 1, old.length() - 4);
-        String folder = folderPath.substring(folderPath.lastIndexOf('/') + 1);
-        if (base.startsWith(folder + "_")) return null;
-        return folderPath + "/" + folder + "_" + base + ".png";
-    }
-
-    private static String blockAlias(String old) {
-        if (!old.contains("/textures/block")) return null;
-        return switch (old.substring(old.lastIndexOf('/') + 1)) {
-            case "grass_path_side.png" -> old.replace("grass_path_side.png", "dirt_path_side.png");
-            case "grass_path_top.png" -> old.replace("grass_path_top.png", "dirt_path_top.png");
-            case "chain.png" -> old.replace("chain.png", "iron_chain.png");
-            case "purpur_pillar.png" -> old.replace("purpur_pillar.png", "purpur_pillar_side.png");
-            case "quartz_pillar.png" -> old.replace("quartz_pillar.png", "quartz_pillar_side.png");
-            default -> null;
-        };
     }
 
     static boolean inScope(String path) {
@@ -329,12 +241,22 @@ final class PackBuilder {
     private static boolean isBlock(String path) { return path.matches("assets/minecraft/textures/blocks?/.*"); }
     private static boolean isPalette(String path) { return path.matches("assets/minecraft/textures/(?:palettes|trims/color_palettes)/.*"); }
 
-    private static String category(String path) {
-        if (isTrim(path)) return "trim";
-        if (isArmor(path)) return "armor";
-        if (isParticle(path)) return "particle";
-        if (isEntity(path)) return "entity";
-        return "block/item";
+    private static String reportCategory(String path) {
+        if (isTrim(path)) return "trims";
+        if (isParticle(path)) return "particles";
+        if (isEntity(path)) return "entities";
+        if (isBlock(path)) return "blocks";
+        if (path.matches("assets/minecraft/textures/items?/.*")) return "items";
+        return null;
+    }
+
+    private static Map<String,String> diff(String path, String modern, String category, String uv) {
+        Map<String,String> entry = new LinkedHashMap<>();
+        entry.put("path", path);
+        if (modern != null) entry.put("modern_path", modern);
+        entry.put("diff_category", category);
+        entry.put("uv_status", uv);
+        return entry;
     }
 
     private boolean layoutCompatible(String path, byte[] old, byte[] recent) throws IOException {
@@ -370,13 +292,14 @@ final class PackBuilder {
         JsonObject sourceModel = source.object("assets/minecraft/models/block/" + name + ".json");
         if (sourceModel == null || !sourceModel.has("parent") || !sourceModel.has("textures")) return null;
         String parent = sourceModel.get("parent").getAsString().replace("minecraft:", "");
-        if (!Set.of("block/cube_all", "block/cube_column", "block/cube_bottom_top").contains(parent)
-            || !target.files.containsKey("assets/minecraft/models/" + parent + ".json")) return null;
+        if (!simpleCubeTemplate(target, parent)) return null;
         JsonObject textures = sourceModel.getAsJsonObject("textures").deepCopy();
         Map<String,byte[]> additions = new TreeMap<>();
         for (var entry : textures.entrySet()) {
-            if (!entry.getValue().isJsonPrimitive()) return null;
-            String id = entry.getValue().getAsString();
+            JsonElement value = entry.getValue();
+            if (value.isJsonObject()) value = value.getAsJsonObject().get("sprite");
+            if (value == null || !value.isJsonPrimitive()) return null;
+            String id = value.getAsString();
             if (id.startsWith("#")) continue;
             String relative = id.replace("minecraft:", "");
             if (!relative.startsWith("block/")) return null;
@@ -398,6 +321,29 @@ final class PackBuilder {
         pack.putAll(additions);
         JsonObject model = new JsonObject(); model.addProperty("parent", "minecraft:" + parent); model.add("textures", textures);
         return model;
+    }
+
+    /** Resolve the actual target template instead of enumerating block names or template aliases. */
+    private static boolean simpleCubeTemplate(Assets target, String parent) {
+        Set<String> visited = new HashSet<>();
+        String current = parent;
+        while (current.startsWith("block/") && visited.add(current) && visited.size() <= 8) {
+            JsonObject model = target.object("assets/minecraft/models/" + current + ".json");
+            if (model == null) return false;
+            if (model.has("elements")) {
+                JsonArray elements = model.getAsJsonArray("elements");
+                if (elements.size() != 1) return false;
+                JsonObject element = elements.get(0).getAsJsonObject();
+                if (!element.has("from") || !element.has("to") || element.has("rotation")) return false;
+                JsonArray from = element.getAsJsonArray("from"), to = element.getAsJsonArray("to");
+                if (from.size() != 3 || to.size() != 3) return false;
+                for (int i=0; i<3; i++) if (from.get(i).getAsDouble() != 0 || to.get(i).getAsDouble() != 16) return false;
+                return element.has("faces") && element.getAsJsonObject("faces").size() == 6;
+            }
+            if (!model.has("parent")) return false;
+            current = model.get("parent").getAsString().replace("minecraft:", "");
+        }
+        return false;
     }
 
     private static JsonObject model(String sprite, int protocol, String parent, boolean held) {

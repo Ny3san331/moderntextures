@@ -26,13 +26,24 @@ public final class Main {
         List<Profiles.Profile> targets = options.containsKey("--all") ? Profiles.ALL : Arrays.stream(options.get("--targets").split(",")).map(String::trim).map(Profiles::version).distinct().toList();
         Path output=Path.of(options.getOrDefault("--output","packs")).toAbsolutePath().normalize(); Files.createDirectories(output);
         Downloads downloads=new Downloads(Path.of(options.getOrDefault("--cache","cache")));
-        Assets source=Assets.read(downloads.officialClient("26.3"));
-        PackBuilder builder=new PackBuilder(source,config,new Prismarine(downloads,config),new ViaMappings(downloads,config));
+        AssetIndex index = new AssetIndex(downloads);
+        Map<String, Set<String>> indexes = new java.util.concurrent.ConcurrentHashMap<>();
+        if (options.containsKey("--all")) {
+            try (var pool = java.util.concurrent.Executors.newFixedThreadPool(6)) {
+                var jobs = targets.stream().map(p -> pool.submit(() -> {
+                    try { indexes.put(p.version(), index.paths(p.version())); }
+                    catch (Exception e) { System.err.println("Índice mcasset indisponível: " + p.version() + ": " + e.getMessage()); }
+                })).toList();
+                for (var job : jobs) job.get();
+            }
+        }
+        Assets source = load("26.3", downloads, index, indexes);
+        PackBuilder builder=new PackBuilder(source,config,null,null);
         Map<Integer,PackManifest.Pack> packs=new TreeMap<>(); Path manifestPath=output.resolve("manifest.json");
         if (Files.exists(manifestPath)) { PackManifest previous=Json.read(manifestPath,PackManifest.class); previous.validate(); previous.packs().forEach(p -> packs.put(p.protocol(),p)); }
         for (var profile : targets) {
             System.out.println("Gerando " + profile.version() + "...");
-            var result=builder.build(profile,Assets.read(downloads.officialClient(profile.version())),output);
+            var result=builder.build(profile,load(profile.version(), downloads, index, indexes),output);
             packs.put(profile.protocol(),new PackManifest.Pack(profile.version(),profile.protocol(),result.zip().getFileName().toString(),result.sha1()));
             PackManifest manifest=new PackManifest(2,"26.3",
                 options.getOrDefault("--variant","default"),
@@ -43,5 +54,14 @@ public final class Main {
             System.out.println("OK: " + result.zip());
         }
         System.out.println("Publique os ZIPs via HTTP(S) e copie manifest.json para plugins/FixTextures/.");
+    }
+    private static Assets load(String version, Downloads downloads, AssetIndex index, Map<String,Set<String>> indexes) throws Exception {
+        Set<String> paths = indexes.get(version);
+        if (paths == null) try { paths = index.paths(version); }
+        catch (Exception e) {
+            System.err.println("mcasset indisponível para " + version + "; usando JAR local: " + e.getMessage());
+            return Assets.read(downloads.officialClient(version));
+        }
+        return Assets.remote(version, downloads, paths, "26.3".equals(version) ? null : downloads.officialClient(version));
     }
 }

@@ -14,6 +14,17 @@ final class Downloads {
     private final Path cache;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).followRedirects(HttpClient.Redirect.NORMAL).build();
     Downloads(Path cache) throws IOException { this.cache = cache.toAbsolutePath().normalize(); Files.createDirectories(this.cache); }
+    static String assetUrl(String version, String path) {
+        if (!version.matches("[0-9a-zA-Z_.-]+") || version.contains("..") ||
+            !path.matches("[a-zA-Z0-9_./-]+") || path.contains("..") || path.startsWith("/"))
+            throw new IllegalArgumentException("Asset inválido: " + version + "/" + path);
+        return "https://assets.mcasset.cloud/" + version + "/" + path;
+    }
+    byte[] asset(String version, String path) throws IOException, InterruptedException {
+        byte[] data = Files.readAllBytes(get(assetUrl(version, path), null));
+        if (data.length > 16 * 1024 * 1024) throw new IOException("Asset excede 16 MiB: " + path);
+        return data;
+    }
     static String sha1(byte[] data) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(data)); }
         catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
@@ -21,7 +32,9 @@ final class Downloads {
     Path get(String url, String expectedHash) throws IOException, InterruptedException {
         String key = sha1(url.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         Path dest = cache.resolve(key);
-        if (Files.isRegularFile(dest) && (expectedHash == null || sha1(Files.readAllBytes(dest)).equals(expectedHash))) return dest;
+        Path digest = cache.resolve(key + ".sha1");
+        if (Files.isRegularFile(dest) && (expectedHash == null || sha1(Files.readAllBytes(dest)).equals(expectedHash)) &&
+            (!Files.exists(digest) || Files.readString(digest).equals(sha1(Files.readAllBytes(dest))))) return dest;
         System.out.println("Download: " + url);
         var request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofMinutes(5)).header("User-Agent", "FixTextures/1.0").GET().build();
         var response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
@@ -38,7 +51,9 @@ final class Downloads {
         if (expectedHash != null && !sha1(Files.readAllBytes(temp)).equals(expectedHash)) {
             Files.deleteIfExists(temp); throw new IOException("SHA-1 divergente: " + url);
         }
+        String actual = sha1(Files.readAllBytes(temp));
         Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING);
+        Files.writeString(digest, actual);
         return dest;
     }
     JsonObject json(String url) throws Exception { return Json.read(get(url, null), JsonObject.class); }

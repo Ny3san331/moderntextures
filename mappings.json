@@ -1,9 +1,15 @@
 {
   "schema": 1,
   "sourceVersion": "26.3",
-  "prismarineCommit": "6c571b0825ee27b81f01127c2bd0d4ba2c89abb9",
-  "viaMappingsCommit": "b0b174b2ffebc087e597dc4ec3c7aa211d3bcb6b",
-  "autoItems": true,
-  "textureAliases": {},
+  "autoItems": false,
+  "textureAliases": {
+    "assets/minecraft/textures/block/grass_path_side.png": "assets/minecraft/textures/block/dirt_path_side.png",
+    "assets/minecraft/textures/block/grass_path_top.png": "assets/minecraft/textures/block/dirt_path_top.png",
+    "assets/minecraft/textures/entity/elytra.png": "assets/minecraft/textures/entity/equipment/wings/elytra.png",
+    "assets/minecraft/textures/entity/chicken.png": "assets/minecraft/textures/entity/chicken/chicken_temperate.png",
+    "assets/minecraft/textures/entity/cow/cow.png": "assets/minecraft/textures/entity/cow/cow_temperate.png",
+    "assets/minecraft/textures/entity/sheep/sheep_fur.png": "assets/minecraft/textures/entity/sheep/sheep_wool.png",
+    "assets/minecraft/textures/entity/pig/pig.png": "assets/minecraft/textures/entity/pig/pig_temperate.png"
+  },
   "items": []
 }

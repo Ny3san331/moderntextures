@@ -8,7 +8,9 @@ public record MappingConfig(int schema, String sourceVersion, String prismarineC
                            String model, Integer customModelData, String originalIdentifier, int stringIndex) {}
     public void validate() {
         if (schema != 1 || !"26.3".equals(sourceVersion)) throw new IllegalArgumentException("mappings.json: schema deve ser 1 e sourceVersion deve ser 26.3.");
-        if (prismarineCommit == null || !prismarineCommit.matches("[a-f0-9]{40}") || viaMappingsCommit == null || !viaMappingsCommit.matches("[a-f0-9]{40}")) throw new IllegalArgumentException("Fixe commits SHA-1 de Prismarine e Via mappings.");
+        if ((prismarineCommit != null && !prismarineCommit.matches("[a-f0-9]{40}")) ||
+            (viaMappingsCommit != null && !viaMappingsCommit.matches("[a-f0-9]{40}")))
+            throw new IllegalArgumentException("Commit SHA-1 inválido.");
         if (textureAliases == null || items == null) throw new IllegalArgumentException("textureAliases e items são obrigatórios.");
         textureAliases.forEach((k,v) -> { texture(k); texture(v); });
         Set<String> used = new HashSet<>();
