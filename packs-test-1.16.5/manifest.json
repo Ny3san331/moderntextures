@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "sourceVersion": "26.3",
+  "variant": "default",
+  "displayName": "FixTextures padrão",
+  "packs": [
+    {
+      "clientVersion": "1.16.5",
+      "protocol": 754,
+      "file": "fixtextures-26.3-to-1.16.5-c7e8cc33c05c.zip",
+      "sha1": "c7e8cc33c05c35b2be3d1375e34c172529399c7a"
+    }
+  ]
+}
