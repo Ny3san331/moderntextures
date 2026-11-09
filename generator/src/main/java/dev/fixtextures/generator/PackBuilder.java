@@ -86,7 +86,7 @@ final class PackBuilder {
             replaced.add(path);
         }
 
-        List<String> skippedItems = new ArrayList<>(), adaptedItems = new ArrayList<>(), heldItems = new ArrayList<>();
+        List<String> skippedItems = new ArrayList<>(), adaptedItems = new ArrayList<>(), heldItems = new ArrayList<>(), cubeItems = new ArrayList<>();
         Map<String,MappingConfig.ItemRule> rules = new TreeMap<>();
         if (config.autoItems() && profile.protocol() >= 477 && via != null) {
             Set<String> available = via.registry(profile.registry(), "items");
@@ -96,11 +96,14 @@ final class PackBuilder {
                 String sprite = "assets/minecraft/textures/item/" + item + ".png";
                 String texture = source.files.containsKey(sprite) ? sprite : "assets/minecraft/textures/block/" + item + ".png";
                 boolean spear = source.files.containsKey("assets/minecraft/textures/item/" + item + "_in_hand.png");
+                JsonObject originalModel = source.object("assets/minecraft/models/item/" + item + ".json");
+                String originalParent = originalModel != null && originalModel.has("parent") ? originalModel.get("parent").getAsString().replace("minecraft:", "") : "";
+                boolean handheld = Set.of("item/handheld", "item/handheld_mace").contains(originalParent);
                 if (mapped == null || !source.files.containsKey(texture) || (profile.protocol() < 769 && mapped.cmd() == null)) {
                     skippedItems.add(item + ": sem tradução verificável ou sprite simples"); continue;
                 }
                 rules.put("minecraft:" + item, new MappingConfig.ItemRule("minecraft:" + item, "minecraft:" + mapped.substitute(),
-                    List.of(profile.version()), texture, spear ? "spear" : "generated", mapped.cmd(), mapped.original(), 0));
+                    List.of(profile.version()), texture, spear ? "spear" : handheld ? "handheld" : "generated", mapped.cmd(), mapped.original(), 0));
             }
         }
         config.select(profile.version()).forEach(r -> rules.put(r.source(), r));
@@ -137,14 +140,25 @@ final class PackBuilder {
                 if (hasHand) pack.put(handPath, source.files.get(handSource));
 
                 String parent = "spear".equals(r.model()) ? "generated" : r.model();
-                JsonObject normal = model(sprite, profile.protocol(), parent, false);
+                JsonObject normal = "generated".equals(r.model()) ? cubeItem(pack, target, name, r.texture(), profile.protocol()) : null;
+                boolean cube = normal != null;
+                if (cube) {
+                    cubeItems.add(r.source());
+                    pack.remove(path); pack.remove(path + ".mcmeta");
+                }
+                else normal = model(sprite, profile.protocol(), parent, false);
+                if ("handheld".equals(r.model()) && "mace".equals(name)) {
+                    JsonObject mace = source.object("assets/minecraft/models/item/handheld_mace.json");
+                    if (mace != null && mace.has("display")) normal.add("display", mace.get("display").deepCopy());
+                }
                 put(pack, "assets/fixtextures/models/item/" + name + ".json", normal);
+                if (spear && !hasHand) throw new IllegalArgumentException("Sprite de lança em mão ausente: " + handSource);
                 if (hasHand) {
                     JsonObject held = model(handSprite, profile.protocol(), "generated", true);
                     put(pack, "assets/fixtextures/models/item/" + name + "_in_hand.json", held);
                     heldItems.add(r.source() + " -> " + r.substitute() + " (modelo de lança/held)");
                 }
-                adaptedItems.add(r.source() + " -> " + r.substitute() + " (" + (hasHand ? "lança em mão" : "sprite aproximado") + ")");
+                adaptedItems.add(r.source() + " -> " + r.substitute() + " (" + (hasHand ? "lança em mão" : cube ? "bloco 3D" : "sprite aproximado") + ")");
             }
             if (profile.protocol() >= 769) modernItems(pack, target, carrier, entries);
             else legacyItems(pack, target, carrier, entries);
@@ -165,6 +179,7 @@ final class PackBuilder {
         report.put("armorUpdated", armorUpdated); report.put("trimsUpdated", trimsUpdated); report.put("particlesUpdated", particlesUpdated);
         report.put("blockAliases", blockAliases);
         report.put("adaptedItems", adaptedItems); report.put("unadaptedItems", skippedItems); report.put("heldItems", heldItems);
+        report.put("cubeItems", cubeItems);
         report.put("newWorldBlocksUsingViaFallback", missingBlocks);
         report.put("worldBlockCatalogAvailable", namedBlockCatalog);
         report.put("conditionalItemModelsAvailable", profile.protocol() >= 477);
@@ -350,6 +365,41 @@ final class PackBuilder {
         return false;
     }
 
+    private JsonObject cubeItem(Map<String,byte[]> pack, Assets target, String name, String texture, int protocol) {
+        if (!texture.startsWith("assets/minecraft/textures/block/")) return null;
+        JsonObject sourceModel = source.object("assets/minecraft/models/block/" + name + ".json");
+        if (sourceModel == null || !sourceModel.has("parent") || !sourceModel.has("textures")) return null;
+        String parent = sourceModel.get("parent").getAsString().replace("minecraft:", "");
+        if (!Set.of("block/cube_all", "block/cube_column", "block/cube_bottom_top").contains(parent)
+            || !target.files.containsKey("assets/minecraft/models/" + parent + ".json")) return null;
+        JsonObject textures = sourceModel.getAsJsonObject("textures").deepCopy();
+        Map<String,byte[]> additions = new TreeMap<>();
+        for (var entry : textures.entrySet()) {
+            if (!entry.getValue().isJsonPrimitive()) return null;
+            String id = entry.getValue().getAsString();
+            if (id.startsWith("#")) continue;
+            String relative = id.replace("minecraft:", "");
+            if (!relative.startsWith("block/")) return null;
+            String original = "assets/minecraft/textures/" + relative + ".png";
+            byte[] data = source.files.get(original);
+            if (data == null) return null;
+            String dest = "block/fixtextures_" + name + "_" + entry.getKey();
+            String path = "assets/minecraft/textures/" + dest + ".png";
+            additions.put(path, data);
+            JsonObject metadata = source.object(original + ".mcmeta");
+            if (metadata != null && metadata.has("animation")) {
+                JsonObject animation = new JsonObject(); animation.add("animation", metadata.get("animation").deepCopy());
+                put(additions, path + ".mcmeta", animation);
+            }
+            if (protocol >= 775) {
+                JsonObject ref = new JsonObject(); ref.addProperty("sprite", "minecraft:" + dest); entry.setValue(ref);
+            } else entry.setValue(new JsonPrimitive("minecraft:" + dest));
+        }
+        pack.putAll(additions);
+        JsonObject model = new JsonObject(); model.addProperty("parent", "minecraft:" + parent); model.add("textures", textures);
+        return model;
+    }
+
     private static JsonObject model(String sprite, int protocol, String parent, boolean held) {
         JsonObject model = new JsonObject(); model.addProperty("parent", "minecraft:item/" + parent);
         if (held) { model.addProperty("gui_light", "front"); model.add("display", SPEAR_DISPLAY.deepCopy()); }
@@ -379,7 +429,7 @@ final class PackBuilder {
         String name = rule.source().replace("minecraft:", "");
         if (!"spear".equals(rule.model())) return modelRef(rule.source());
         JsonObject select = new JsonObject(); select.addProperty("type", "minecraft:select"); select.addProperty("property", "minecraft:display_context");
-        JsonArray when = new JsonArray(); when.add("gui"); when.add("ground"); when.add("fixed"); when.add("on_shelf");
+        JsonArray when = new JsonArray(); when.add("gui"); when.add("ground"); when.add("fixed");
         JsonObject entry = new JsonObject(); entry.add("when", when); entry.add("model", ref("fixtextures:item/" + name));
         JsonArray cases = new JsonArray(); cases.add(entry); select.add("cases", cases);
         select.add("fallback", ref("fixtextures:item/" + name + "_in_hand"));
@@ -397,14 +447,17 @@ final class PackBuilder {
     static void legacyItems(Map<String,byte[]> pack, Assets target, String carrier, List<MappingConfig.ItemRule> rules) {
         String path = "assets/minecraft/models/item/" + carrier + ".json";
         JsonObject root = target.object(path).deepCopy();
+        String fallback = "fixtextures:item/base/" + carrier;
+        put(pack, "assets/fixtextures/models/item/base/" + carrier + ".json", root.deepCopy());
         JsonArray overrides = root.has("overrides") ? root.getAsJsonArray("overrides") : new JsonArray();
         rules.sort(Comparator.comparingInt(MappingConfig.ItemRule::customModelData)); Set<Integer> ids = new HashSet<>();
         for (var rule : rules) {
             int cmd = rule.customModelData(); if (!ids.add(cmd)) throw new IllegalArgumentException("CustomModelData duplicado: " + carrier + ":" + cmd);
             String name = rule.source().replace("minecraft:", "");
             String model = "fixtextures:item/" + name + ("spear".equals(rule.model()) ? "_in_hand" : "");
-            // The unchanged base model is already the fallback for every unmatched value.
+            // Legacy predicates mean >=, not equality. Reset after this exact integer.
             overrides.add(override(cmd, model));
+            overrides.add(override(cmd + 1, fallback));
         }
         root.add("overrides", overrides); put(pack, path, root);
     }

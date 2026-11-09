@@ -1,5 +1,5 @@
 name: FixTextures
-version: 1.0.0
+version: 1.0.1
 main: dev.fixtextures.plugin.FixTexturesPlugin
 api-version: '26.3'
 description: Texturas da 26.3 por protocolo para Paper 26.3 (blocos, entidades, armadura, trims, partículas e itens segurados).

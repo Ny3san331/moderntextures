@@ -67,6 +67,8 @@ public final class FixTexturesPlugin extends JavaPlugin implements Listener, Com
         Objects.requireNonNull(getCommand("fixtextures")).setExecutor(this);
         Objects.requireNonNull(getCommand("fixtextures")).setTabCompleter(this);
         startHttpServer(settings);
+        if (!Bukkit.getServer().getResourcePack().isBlank())
+            getLogger().warning("server.properties também envia um resource pack. Clientes até 1.20.2 não empilham packs: use um único pack mesclado para evitar substituição e recargas.");
         int profiles = settings.variants().values().stream().mapToInt(v -> v.manifest().packs().size()).sum();
         getLogger().info("Variantes: " + settings.variants().size() + "; perfis: " + profiles + ". Tradução Via deve estar instalada neste Paper.");
         if (settings.base() == null || profiles == 0) getLogger().warning("Gere os packs, copie manifest.json e configure base-url. Use /ft reload depois.");
@@ -299,7 +301,11 @@ public final class FixTexturesPlugin extends JavaPlugin implements Listener, Com
         session.pack=selected.get(); session.state=PackState.SENT; session.detail="Pack enviado (" + variant.name() + ")";
         String url=variant.base().resolve(session.pack.file()).toASCIIString();
         try {
-            player.setResourcePack(session.pack.id(),url,HexFormat.of().parseHex(session.pack.sha1()),Component.text(settings.prompt),false);
+            // setResourcePack first removes all packs, causing an extra reload on legacy clients.
+            // Their protocol already replaces the active pack when a new one is sent.
+            if (session.protocol < 765)
+                player.addResourcePack(session.pack.id(),url,HexFormat.of().parseHex(session.pack.sha1()),settings.prompt,false);
+            else player.setResourcePack(session.pack.id(),url,HexFormat.of().parseHex(session.pack.sha1()),Component.text(settings.prompt),false);
             getLogger().info(player.getName()+": variante="+variant.name()+", protocolo="+session.protocol+", pack="+session.pack.file()+", sha1="+session.pack.sha1());
             session.task=Bukkit.getScheduler().runTaskLater(this,() -> {
                 if (current(player,session) && session.state.pending()) {
@@ -328,8 +334,9 @@ public final class FixTexturesPlugin extends JavaPlugin implements Listener, Com
     }
 
     private void fallback(Player player,Session session) {
-        session.cancel(); getLogger().warning(player.getName()+": "+session.detail+". Mantendo aparência padrão do cliente/ViaBackwards.");
-        if (settings.notifyPlayer) player.sendMessage(Component.text("[FixTextures] Pack indisponível. Você continuará com as texturas padrão compatíveis.", NamedTextColor.YELLOW));
+        session.cancel(); getLogger().warning(player.getName()+": "+session.detail+". Aplicação do FixTextures não confirmada."
+            + (session.protocol < 765 ? " Cliente legado: respostas não identificam o pack; confira outro emissor de packs e server.properties." : ""));
+        if (settings.notifyPlayer) player.sendMessage(Component.text("[FixTextures] Aplicação do pack não confirmada. Consulte /ft status ou avise a administração.", NamedTextColor.YELLOW));
     }
 
     private boolean admin(CommandSender sender) {
@@ -361,7 +368,14 @@ public final class FixTexturesPlugin extends JavaPlugin implements Listener, Com
             if (args[0].equalsIgnoreCase("send")) {
                 if (session!=null && (session.detecting || session.state!=null && session.state.pending())) sender.sendMessage(Component.text("Já há detecção/carregamento em andamento.", NamedTextColor.YELLOW));
                 else { begin(target); sender.sendMessage(Component.text("Envio agendado para "+target.getName(), NamedTextColor.GREEN)); }
-            } else sender.sendMessage(Component.text(session==null ? "Sem sessão." : target.getName()+": protocolo="+session.protocol+", variante="+(session.variant==null?settings.defaultVariant():session.variant)+", estado="+session.state+", "+session.detail, NamedTextColor.GRAY));
+            } else {
+                sender.sendMessage(Component.text(session==null ? "Sem sessão." : target.getName()+": protocolo="+session.protocol+", variante="+(session.variant==null?settings.defaultVariant():session.variant)+", estado="+session.state+", "+session.detail, NamedTextColor.GRAY));
+                if (session != null && session.pack != null)
+                    sender.sendMessage(Component.text("Pack=" + session.pack.file() + ", SHA-1=" + session.pack.sha1(), NamedTextColor.GRAY));
+                if (session != null && session.protocol <= 754) {
+                    sender.sendMessage(Component.text("Cliente até 1.16.5: altura vanilla Y=0..255; Y atual=" + target.getLocation().getBlockY() + ". Resource pack não amplia a altura.", NamedTextColor.YELLOW));
+                }
+            }
             return true;
         }
         sender.sendMessage(Component.text("Uso: /ft <status [jogador]|send [jogador]|reload|texture list|texture <nome>|texture <jogador> <nome>>", NamedTextColor.GRAY));
@@ -387,6 +401,13 @@ public final class FixTexturesPlugin extends JavaPlugin implements Listener, Com
         if (target == null) { sender.sendMessage(Component.text("Jogador online não encontrado.", NamedTextColor.RED)); return true; }
         if (!settings.variants().containsKey(variantName)) {
             sender.sendMessage(Component.text("Variante inexistente: " + variantName + ". Use /ft texture list.", NamedTextColor.RED)); return true;
+        }
+        Session active = sessions.get(target.getUniqueId());
+        if (active != null && (active.detecting || active.state != null && active.state.pending())) {
+            sender.sendMessage(Component.text("Aguarde o carregamento atual antes de trocar de variante.", NamedTextColor.YELLOW)); return true;
+        }
+        if (active != null && variantName.equals(active.variant) && active.state == PackState.LOADED) {
+            sender.sendMessage(Component.text("Essa variante já está carregada. Para reenviar, use /ft send.", NamedTextColor.GRAY)); return true;
         }
         if (!settings.allowChoice() && !target.equals(sender)) { sender.sendMessage(Component.text("Seleção desabilitada no config.yml.", NamedTextColor.RED)); return true; }
         preferences.put(target.getUniqueId(), variantName); savePreferences();

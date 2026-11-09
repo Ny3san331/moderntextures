@@ -81,8 +81,11 @@ class PackGenerationTest {
             assertNotNull(zip.getEntry("assets/minecraft/textures/item/fixtextures_test_spear.png"));
             var model=JsonParser.parseString(new String(zip.getInputStream(zip.getEntry("assets/minecraft/models/item/iron_sword.json")).readAllBytes())).getAsJsonObject();
             var overrides=model.getAsJsonArray("overrides");
-            assertEquals(1,overrides.size());
+            assertEquals(2,overrides.size());
             assertEquals(1234,overrides.get(0).getAsJsonObject().getAsJsonObject("predicate").get("custom_model_data").getAsInt());
+            assertEquals(1235,overrides.get(1).getAsJsonObject().getAsJsonObject("predicate").get("custom_model_data").getAsInt());
+            assertEquals("fixtextures:item/base/iron_sword", overrides.get(1).getAsJsonObject().get("model").getAsString());
+            assertNotNull(zip.getEntry("assets/fixtextures/models/item/base/iron_sword.json"));
         }
     }
     @Test void modernItemSelectPreservesOriginalFallbackAndUsesMinecraftSpritePath() throws Exception {
@@ -119,6 +122,47 @@ class PackGenerationTest {
             assertEquals("minecraft:item/fixtextures_test_spear",sprite);
         }
     }
+    @Test void newCubeItemsKeepTheirThreeDimensionalTemplateAndTextures() throws Exception {
+        var rule = new MappingConfig.ItemRule("minecraft:amethyst_block","minecraft:purpur_block",List.of("1.16.5"),
+            "assets/minecraft/textures/block/amethyst_block.png","generated",1234,"amethyst_block",0);
+        var config = new MappingConfig(1,"26.3","a".repeat(40),"b".repeat(40),false,Map.of(),List.of(rule));
+        Assets source = new Assets(), target = new Assets();
+        source.files.put(rule.texture(), png(16,16));
+        PackBuilder.put(source.files,"assets/minecraft/models/block/amethyst_block.json",
+            JsonParser.parseString("{\"parent\":\"minecraft:block/cube_all\",\"textures\":{\"all\":\"minecraft:block/amethyst_block\"}}"));
+        PackBuilder.put(target.files,"assets/minecraft/models/item/purpur_block.json",JsonParser.parseString("{\"parent\":\"minecraft:block/purpur_block\"}"));
+        PackBuilder.put(target.files,"assets/minecraft/models/block/cube_all.json",new JsonObject());
+        target.files.put("version.json","{\"pack_version\":6}".getBytes());
+        var result = new PackBuilder(source,config,null,null).build(Profiles.version("1.16.5"),target,dir);
+        try (var zip = new ZipFile(result.zip().toFile())) {
+            var entry = zip.getEntry("assets/fixtextures/models/item/amethyst_block.json");
+            var model = JsonParser.parseString(new String(zip.getInputStream(entry).readAllBytes())).getAsJsonObject();
+            assertEquals("minecraft:block/cube_all",model.get("parent").getAsString());
+            assertNotNull(zip.getEntry("assets/minecraft/textures/block/fixtextures_amethyst_block_all.png"));
+            assertNull(zip.getEntry("assets/minecraft/models/block/purpur_block.json"));
+            assertNull(zip.getEntry("assets/minecraft/textures/block/purpur_block.png"));
+        }
+    }
+
+    @Test void adjacentLegacySelectorsDoNotLeakIntoUnrelatedCustomModelData() {
+        Assets target = new Assets(); Map<String,byte[]> pack = new TreeMap<>();
+        PackBuilder.put(target.files,"assets/minecraft/models/item/iron_sword.json",new JsonObject());
+        var rules = new ArrayList<MappingConfig.ItemRule>();
+        for (int id : List.of(10,11,20)) rules.add(new MappingConfig.ItemRule("minecraft:test_"+id,"minecraft:iron_sword",List.of("1.16.5"),
+            "assets/minecraft/textures/item/test.png","generated",id,"test_"+id,0));
+        PackBuilder.legacyItems(pack,target,"iron_sword",rules);
+        var root = JsonParser.parseString(new String(pack.get("assets/minecraft/models/item/iron_sword.json"))).getAsJsonObject();
+        for (int value : List.of(0,10,11,12,19,20,21,999)) {
+            String selected = "vanilla";
+            for (var element : root.getAsJsonArray("overrides")) {
+                var override = element.getAsJsonObject();
+                if (value >= override.getAsJsonObject("predicate").get("custom_model_data").getAsInt()) selected = override.get("model").getAsString();
+            }
+            assertEquals(List.of(10,11,20).contains(value) ? "fixtextures:item/test_"+value
+                : value < 10 ? "vanilla" : "fixtextures:item/base/iron_sword", selected, "CMD="+value);
+        }
+    }
+
     @Test void mapsMovedEquipmentAndEntitiesButRejectsChangedDimensions() throws Exception {
         var config = new MappingConfig(1,"26.3","a".repeat(40),"b".repeat(40),false,Map.of(),List.of());
         Assets source = new Assets(), target = new Assets();

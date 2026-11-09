@@ -51,6 +51,6 @@ foreach ($file in @('FixTextures.jar','FixTextures-Generator.jar','FixTextures-P
     $releaseEntries += @{ File=(Join-Path $release $file); Name=$file }
 }
 Get-ChildItem (Join-Path $root 'docs') -File | ForEach-Object { $releaseEntries += @{ File=$_.FullName; Name=('docs/' + $_.Name) } }
-Write-Zip (Join-Path $release 'FixTextures-1.0.0.zip') $releaseEntries
+Write-Zip (Join-Path $release 'FixTextures-1.0.1.zip') $releaseEntries
 Get-ChildItem $release -File | Select-Object Name,Length
 
